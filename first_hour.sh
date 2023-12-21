@@ -248,6 +248,7 @@ update() {
             yum -y update
             ;;
         "opensuse")
+            zypper refresh
             zypper update
             ;;
         "alpine")
