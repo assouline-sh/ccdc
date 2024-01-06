@@ -7,19 +7,19 @@ update() {
 
     case $distro in
         "ubuntu" | "debian" | "mint")
-            apt-get update > /dev/null 2>&1
-            apt-get -y upgrade > /dev/null 2>&1
+            apt-get update > /dev/null 
+            apt-get -y upgrade > /dev/null 
             ;;
         "centos" | "rhel" | "fedora")
-            yum -y update > /dev/null 2>&1
+            yum -y update > /dev/null 
             ;;
         "opensuse")
-            zypper refresh > /dev/null 2>&1
-            zypper update > /dev/null 2>&1
+            zypper refresh > /dev/null
+            zypper update > /dev/null
             ;;
         "alpine")
-            apk update > /dev/null 2>&1
-            apk upgrade > /dev/null 2>&1
+            apk update > /dev/null 
+            apk upgrade > /dev/null
             ;;
         *)
             echo "Error updating packages. Moving on..."
@@ -35,9 +35,9 @@ clean_packages() {
 
     case $distro in
         "ubuntu" | "debian" | "mint")
-            apt-get install -y deborphan
-            deborphan --guess-data | xargs apt-get -y remove --purge
-            deborphan | xargs apt-get -y remove --purge
+            apt-get install -y deborphan > /dev/null 
+            deborphan --guess-data | xargs apt-get -y remove --purge  > /dev/null 
+            deborphan | xargs apt-get -y remove --purge  > /dev/null 
             ;;
         "centos" | "rhel" | "fedora")
             yum autoremove
@@ -108,7 +108,7 @@ enumerate() {
 
     # Cron jobs
     echo -e "\nCron Jobs:" >> first_hour.txt
-    directories = ("/etc/cron.d" "/etc/cron.daily" "/etc/cron.hourly" "/etc/cron.monthly" "/etc/cron.weekly" "/var/spool/cron" "/etc/anacrontab" "/var/spool/anacron")
+    directories=("/etc/cron.d" "/etc/cron.daily" "/etc/cron.hourly" "/etc/cron.monthly" "/etc/cron.weekly" "/var/spool/cron" "/etc/anacrontab" "/var/spool/anacron")
     for directory in "${directories[@]}"; do
         echo "Cron Jobs in $directory:" >> first_hour.txt
         for file in "$directory"/*; do
@@ -521,17 +521,6 @@ backup_configs() {
     chattr +i -R /var/backups/*
 }
 
-
-#11
-wazuh_agent() {
-
-}
-
-#12
-wazuh_listen() {
-
-}
-
 # Check if running script as root
 if [ "$EUID" -ne 0 ]; then
     echo "Please run this script as root. Exiting"
@@ -544,7 +533,7 @@ if [ -e /etc/os-release ]; then
     distro=$ID
     echo "Detected: $distro"
 
-    touch output.txt
+    touch first_hour.txt
 
     # call functions
 
