@@ -7,19 +7,19 @@ update() {
 
     case $distro in
         "ubuntu" | "debian" | "mint")
-            apt-get update
-            apt-get -y upgrade
+            apt-get update > /dev/null 2>&1
+            apt-get -y upgrade > /dev/null 2>&1
             ;;
         "centos" | "rhel" | "fedora")
-            $pm -y update
+            yum -y update > /dev/null 2>&1
             ;;
         "opensuse")
-            $pm refresh
-            $pm update
+            zypper refresh > /dev/null 2>&1
+            zypper update > /dev/null 2>&1
             ;;
         "alpine")
-            apk update
-            apk upgrade
+            apk update > /dev/null 2>&1
+            apk upgrade > /dev/null 2>&1
             ;;
         *)
             echo "Error updating packages. Moving on..."
