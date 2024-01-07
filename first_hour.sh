@@ -255,16 +255,16 @@ auditd() {
     echo "[Running auditd] Installing and setting rules for auditd..."
 
     case $distro in
-        "ubuntu" | "debian")
-            apt-get install auditd > /dev/null
+        *ubuntu* | *debian* | *mint*)
+            apt-get install -y auditd > /dev/null
             ;;
-        "centos" | "rhel" | "fedora")
-            yum install auditd > /dev/null 
+        *centos* | *rhel* | *fedora*)
+            yum install -y auditd > /dev/null 
             ;;
-        "opensuse")
-            zypper install audit > /dev/null 
+        *opensuse*)
+            zypper install -y audit > /dev/null 
             ;;
-        "alpine")
+        *alpine*)
             apk add audit > /dev/null 
             ;;
         *)
@@ -272,52 +272,52 @@ auditd() {
             return 1
     esac
 
-    if [ $distro != "alpine" ]; then
+    if [ $distro != *alpine* ]; then
 		systemctl start auditd
-		systemctl enable auditd
+		systemctl enable auditd > /dev/null 
     else
 		rc-service auditd start
 		rc-update add auditd
     fi
 
-    auditctl -e 1
+    auditctl -e 1 > /dev/null 
     auditctl -w /etc/audit/ -p wa -k auditconfig
     auditctl -w /etc/libaudit.conf -p wa -k auditconfig
     auditctl -w /etc/audisp/ -p wa -k audispconfig
     auditctl -w /etc/sysctl.conf -p wa -k sysctl
     auditctl -w /etc/sysctl.d -p wa -k sysctl
-	auditctl -w /etc/cron.allow -p wa -k cron
-	auditctl -w /etc/cron.deny -p wa -k cron
-	auditctl -w /etc/cron.d/ -p wa -k cron
-	auditctl -w /etc/cron.daily/ -p wa -k cron
-	auditctl -w /etc/cron.hourly/ -p wa -k cron
-	auditctl -w /etc/crontab -p wa -k cron
-	auditctl -w /etc/sudoers -p wa -k sudoers
-	auditctl -w /etc/sudoers.d/ -p wa -k sudoers
-	auditctl -w /usr/sbin/groupadd -p x -k group_add
-	auditctl -w /usr/sbin/groupmod -p x -k group_mod
-	auditctl -w /usr/sbin/addgroup -p x -k add_group
-	auditctl -w /usr/sbin/useradd -p x -k user_add
-	auditctl -w /usr/sbin/userdel -p x -k user_del
-	auditctl -w /usr/sbin/usermod -p x -k user_mod
-	auditctl -w /usr/sbin/adduser -p x -k add_user
-	auditctl -w /etc/login.defs -p wa -k login
-	auditctl -w /etc/securetty -p wa -k login
-	auditctl -w /var/log/faillog -p wa -k login
-	auditctl -w /var/log/lastlog -p wa -k login
-	auditctl -w /var/log/tallylog -p wa -k login
-	auditctl -w /etc/passwd -p wa -k users
-	auditctl -w /etc/shadow -p wa -k users
-	auditctl -w /etc/sudoers -p wa -k users
-	auditctl -w /bin/rmdir -p x -k directory
-	auditctl -w /bin/mkdir -p x -k directory
-	auditctl -w /usr/bin/passwd -p x -k passwd
-	auditctl -w /usr/bin/vim -p x -k text
-	auditctl -w /bin/nano -p x -k text
-	auditctl -w /usr/bin/pico -p x -k text
+    auditctl -w /etc/cron.allow -p wa -k cron
+    auditctl -w /etc/cron.deny -p wa -k cron
+    auditctl -w /etc/cron.d/ -p wa -k cron
+    auditctl -w /etc/cron.daily/ -p wa -k cron
+    auditctl -w /etc/cron.hourly/ -p wa -k cron
+    auditctl -w /etc/crontab -p wa -k cron
+    auditctl -w /etc/sudoers -p wa -k sudoers
+    auditctl -w /etc/sudoers.d/ -p wa -k sudoers
+    auditctl -w /usr/sbin/groupadd -p x -k group_add
+    auditctl -w /usr/sbin/groupmod -p x -k group_mod
+    auditctl -w /usr/sbin/addgroup -p x -k add_group
+    auditctl -w /usr/sbin/useradd -p x -k user_add
+    auditctl -w /usr/sbin/userdel -p x -k user_del
+    auditctl -w /usr/sbin/usermod -p x -k user_mod
+    auditctl -w /usr/sbin/adduser -p x -k add_user
+    auditctl -w /etc/login.defs -p wa -k login
+    auditctl -w /etc/securetty -p wa -k login
+    auditctl -w /var/log/faillog -p wa -k login
+    auditctl -w /var/log/lastlog -p wa -k login
+    auditctl -w /var/log/tallylog -p wa -k login
+    auditctl -w /etc/passwd -p wa -k users
+    auditctl -w /etc/shadow -p wa -k users
+    auditctl -w /etc/sudoers -p wa -k users
+    auditctl -w /bin/rmdir -p x -k directory
+    auditctl -w /bin/mkdir -p x -k directory
+    auditctl -w /usr/bin/passwd -p x -k passwd
+    auditctl -w /usr/bin/vim -p x -k text
+    auditctl -w /bin/nano -p x -k text
+    auditctl -w /usr/bin/pico -p x -k text
 
-	if [ $distro != "alpine" ]; then
-		systemctl restart auditd
+	if [ $distro != *alpine* ]; then
+		systemctl restart auditd 
     else
 		rc-service auditd restart
     fi
