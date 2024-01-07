@@ -43,8 +43,7 @@ clean_packages() {
             yum -y autoremove > /dev/null
             ;;
         *opensuse*)
-            zypper install zypper-clean
-            zypper-clean
+            zypper packages --orphaned | grep -E '^[ivcud]' | awk '{print $5}' | xargs zypper remove --clean-deps > /dev/null
             ;;
         *)
             echo "Error cleaning up packages. Moving on..."
@@ -71,7 +70,6 @@ enumerate() {
     echo "$os_info" >> first_hour.txt
 
     # Network
-    echo -e "\nNetwork:" >> first_hour.txt
     interfaces=$(ip a | grep -v "lo" | grep "UP" | awk '{print $2}' | cut -d ":" -f1)
     declare -A ip_addresses
     declare -A mac_addresses
@@ -144,13 +142,27 @@ configure_ssh() {
     echo "[Running configure_ssh] Updating SSH configuration file..."
 
     if [ -f /etc/ssh/sshd_config ]; then
-        sed -i 's/^Protocol\s\+.*/Protocol 2/' /etc/ssh/sshd_config
+
+        sed -i '/^#X11Forwarding/s/^#//' /etc/ssh/sshd_config
+        sed -i '/^#MaxAuthTries/s/^#//' /etc/ssh/sshd_config
+        sed -i '/^#IgnoreRhosts/s/^#//' /etc/ssh/sshd_config
+        sed -i '/^#HostbasedAuthentication/s/^#//' /etc/ssh/sshd_config
+        sed -i '/^#PermitRootLogin/s/^#//' /etc/ssh/sshd_config
+        sed -i '/^#PermitEmptyPasswords/s/^#//' /etc/ssh/sshd_config
+
         sed -i 's/^X11Forwarding\s\+.*/X11Forwarding no/' /etc/ssh/sshd_config
         sed -i 's/^MaxAuthTries\s\+.*/MaxAuthTries 3/' /etc/ssh/sshd_config
         sed -i 's/^IgnoreRhosts\s\+.*/IgnoreRhosts yes/' /etc/ssh/sshd_config
         sed -i 's/^HostbasedAuthentication\s\+.*/HostbasedAuthentication no/' /etc/ssh/sshd_config
         sed -i 's/^PermitRootLogin\s\+.*/PermitRootLogin no/' /etc/ssh/sshd_config
         sed -i 's/^PermitEmptyPasswords\s\+.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config
+
+        grep -q '^X11Forwarding\s\+no' /etc/ssh/sshd_config || echo "X11Forwarding no" >> /etc/ssh/sshd_config
+        grep -q '^MaxAuthTries\s\+3' /etc/ssh/sshd_config || echo "MaxAuthTries 3" >> /etc/ssh/sshd_config
+        grep -q '^IgnoreRhosts\s\+yes' /etc/ssh/sshd_config || echo "IgnoreRhosts yes" >> /etc/ssh/sshd_config
+        grep -q '^HostbasedAuthentication\s\+no' /etc/ssh/sshd_config || echo "HostbasedAuthentication no" >> /etc/ssh/sshd_config
+        grep -q '^PermitRootLogin\s\+no' /etc/ssh/sshd_config || echo "PermitRootLogin no" >> /etc/ssh/sshd_config
+        grep -q '^PermitEmptyPasswords\s\+no' /etc/ssh/sshd_config || echo "PermitEmptyPasswords no" >> /etc/ssh/sshd_config
     fi 
 
     echo "*/10 * * * * root service ssh start" >> /etc/crontab
