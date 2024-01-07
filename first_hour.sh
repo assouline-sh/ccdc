@@ -6,18 +6,18 @@ update() {
     echo "[Running update] Updating packages..."
 
     case $distro in
-        "ubuntu" | "debian" | "mint")
+        *ubuntu* | *debian* | *mint*)
             apt-get update > /dev/null 
             apt-get -y upgrade > /dev/null 
             ;;
-        "centos" | "rhel" | "fedora")
+        *centos* | *rhel* | *fedora*)
             yum -y update > /dev/null 
             ;;
-        "opensuse")
+        *opensuse*)
             zypper refresh > /dev/null
             zypper update > /dev/null
             ;;
-        "alpine")
+        *alpine*)
             apk update > /dev/null 
             apk upgrade > /dev/null
             ;;
@@ -34,20 +34,17 @@ clean_packages() {
     echo "[Running clean_packages] Cleaning up unnecessary packages..."
 
     case $distro in
-        "ubuntu" | "debian" | "mint")
+        *ubuntu* | *debian* | *mint*)
             apt-get install -y deborphan > /dev/null 
             deborphan --guess-data | xargs apt-get -y remove --purge  > /dev/null 
             deborphan | xargs apt-get -y remove --purge  > /dev/null 
             ;;
-        "centos" | "rhel" | "fedora")
-            yum autoremove
+        *centos* | *rhel* | *fedora*)
+            yum -y autoremove > /dev/null
             ;;
-        "opensuse")
+        *opensuse*)
             zypper install zypper-clean
             zypper-clean
-            ;;
-        "alpine")
-            apk del $(apk info -r -v $(apk info -q))
             ;;
         *)
             echo "Error cleaning up packages. Moving on..."
@@ -66,10 +63,10 @@ enumerate() {
     echo "========== ENUMERATION ==========" >> first_hour.txt
 
     # OS
-    echo -e "\nOS:" >> first_hour.txt
     hostname=$(hostname)    
-    os_info=$(cat /etc/*-release 2>/dev/null)
     echo "Hostname: $hostname" >> first_hour.txt
+
+    os_info=$(cat /etc/*-release 2>/dev/null)
     echo "OS Information:" >> first_hour.txt
     echo "$os_info" >> first_hour.txt
 
@@ -533,7 +530,7 @@ if [ -e /etc/os-release ]; then
     distro=$ID
     echo "Detected: $distro"
 
-    touch first_hour.txt
+    touch fh.txt
 
     # call functions
 
