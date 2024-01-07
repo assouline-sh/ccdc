@@ -58,16 +58,16 @@ clean_packages() {
 # Enumeration
 # =======================================================================================
 enumerate() {
-    echo "[Running enumerate] Enumerating system information. Writing to first_hour.txt..."
-    echo "========== ENUMERATION ==========" >> first_hour.txt
+    echo "[Running enumerate] Enumerating system information. Writing to fh.txt..."
+    echo "========== ENUMERATION ==========" >> fh.txt
 
     # OS
     hostname=$(hostname)    
-    echo "Hostname: $hostname" >> first_hour.txt
+    echo "Hostname: $hostname" >> fh.txt
 
     os_info=$(cat /etc/*-release 2>/dev/null)
-    echo "OS Information:" >> first_hour.txt
-    echo "$os_info" >> first_hour.txt
+    echo "OS Information:" >> fh.txt
+    echo "$os_info" >> fh.txt
 
     # Network
     interfaces=$(ip a | grep -v "lo" | grep "UP" | awk '{print $2}' | cut -d ":" -f1)
@@ -83,37 +83,37 @@ enumerate() {
             echo "  IP Address: ${ip_addresses[$interface]}"
             echo "  MAC Address: ${mac_addresses[$interface]}"
         done
-    } >> first_hour.txt
+    } >> fh.txt
 
     # Users
-    echo -e "\nUsers:" >> first_hour.txt
-    getent passwd | awk -F: '/\/(bash|sh)$/ { print $1 }' >> first_hour.txt
+    echo -e "\nUsers:" >> fh.txt
+    getent passwd | awk -F: '/\/(bash|sh)$/ { print $1 }' >> fh.txt
 
     # Groups
-    echo -e "\nGroups:" >> first_hour.txt
+    echo -e "\nGroups:" >> fh.txt
     while IFS=: read -r group_name _ _ user_list; do
         if [ -n "$user_list" ]; then
-            echo "Group: $group_name" >> first_hour.txt
-            echo "Users: $user_list" >> first_hour.txt
+            echo "Group: $group_name" >> fh.txt
+            echo "Users: $user_list" >> fh.txt
         else
-            echo "Deleting group: $group_name" >> first_hour.txt
+            echo "Deleting group: $group_name" >> fh.txt
             groupdel "$group_name" 2>/dev/null
         fi
     done < <(cat /etc/group)
 
     # Cron jobs
-    echo -e "\nCron Jobs:" >> first_hour.txt
+    echo -e "\nCron Jobs:" >> fh.txt
     directories=("/etc/cron.d" "/etc/cron.daily" "/etc/cron.hourly" "/etc/cron.monthly" "/etc/cron.weekly" "/var/spool/cron" "/etc/anacrontab" "/var/spool/anacron")
     for directory in "${directories[@]}"; do
-        echo "Cron Jobs in $directory:" >> first_hour.txt
+        echo "Cron Jobs in $directory:" >> fh.txt
         for file in "$directory"/*; do
             if [ -f "$file" ]; then
-                echo "File: $file" >> first_hour.txt
-                cat "$file" >> first_hour.txt
+                echo "File: $file" >> fh.txt
+                cat "$file" >> fh.txt
             fi
         done
     done
-    echo "[Completed enumerate] Results in first_hour.txt"
+    echo "[Completed enumerate] Results in fh.txt"
 }
 
 
@@ -122,7 +122,7 @@ enumerate() {
 manage_acc() {
     echo "[Running manage_acc] Changing user passwords and locking accounts (except for yourself and root)..."
 
-    current_user=$(whoami)
+    current_user=$(echo $SUDO_USER)
     for user in $(awk -F':' '$1 != "root" && $1 != "'"$current_user"'" && $7 != "/sbin/nologin" && $7 != "/bin/false" {print $1}' /etc/passwd); do
         new_password=$(openssl rand -base64 12)
         echo "$user:$new_password" | chpasswd
@@ -131,6 +131,7 @@ manage_acc() {
     for user in $(awk -F':' '$1 != "root" && $1 != "'"$current_user"'" && $7 != "/sbin/nologin" && $7 != "/bin/false" {print $1}' /etc/passwd); do
         usermod --shell /sbin/nologin --lock $user
     done
+    usermod -s /sbin/nologin root
 
     echo "[Completed manage_acc]"
 }
@@ -177,14 +178,13 @@ firewall() {
     echo "[Running firewall] Installing and allowing ssh in ufw or iptables..."
 
     case $distro in
-        "ubuntu" | "debian" | "mint")
-            apt-get install -y ufw
+        *ubuntu* | *debian* | *mint*)
+            apt-get install -y ufw > /dev/null 
             ufw allow ssh
             ufw logging on 
             ufw enable 
-            ufw start
             ;;
-        "centos" | "rhel" | "fedora" | "opensuse" | "alpine")
+        *centos* | *rhel* | *fedora* | *opensuse* | *alpine*)
             iptables -P INPUT DROP
             iptables -P FORWARD DROP
             iptables -A INPUT -p tcp --dport 22 -j ACCEPT
@@ -211,18 +211,18 @@ firewall() {
 fail2ban() {
     echo "[Running fail2ban] Installing and starting fail2ban..."
     case $distro in
-        "ubuntu" | "debian" | "mint")
-            apt-get install -y fail2ban
+        *ubuntu* | *debian* | *mint*)
+            apt-get install -y fail2ban > /dev/null 
             ;;
-        "centos" | "rhel" | "fedora")
-            yum install -y epel-release
-            yum install -y fail2ban
+        *centos* | *rhel* | *fedora*)
+            yum install -y epel-release > /dev/null 
+            yum install -y fail2ban > /dev/null 
             ;;
-        "opensuse")
-            zypper install -y fail2ban
+        *opensuse*)
+            zypper install -y fail2ban > /dev/null 
             ;;
-        "alpine")
-            apk add fail2ban
+        *alpine*)
+            apk add fail2ban > /dev/null 
             ;;
         *)
             echo "Error installing fail2ban. Moving on..."
@@ -256,16 +256,16 @@ auditd() {
 
     case $distro in
         "ubuntu" | "debian")
-            apt-get install auditd
+            apt-get install auditd > /dev/null
             ;;
         "centos" | "rhel" | "fedora")
-            yum install auditd
+            yum install auditd > /dev/null 
             ;;
         "opensuse")
-            zypper install audit
+            zypper install audit > /dev/null 
             ;;
         "alpine")
-            apk add audit
+            apk add audit > /dev/null 
             ;;
         *)
             echo "Error installing auditd. Moving on..."
@@ -541,8 +541,6 @@ if [ -e /etc/os-release ]; then
     . /etc/os-release
     distro=$ID
     echo "Detected: $distro"
-
-    touch fh.txt
 
     # call functions
 
