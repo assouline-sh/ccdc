@@ -281,45 +281,47 @@ auditd() {
     fi
 
     auditctl -e 1 > /dev/null 
-    auditctl -w /etc/audit/ -p wa -k auditconfig
-    auditctl -w /etc/libaudit.conf -p wa -k auditconfig
-    auditctl -w /etc/audisp/ -p wa -k audispconfig
-    auditctl -w /etc/sysctl.conf -p wa -k sysctl
-    auditctl -w /etc/sysctl.d -p wa -k sysctl
-    auditctl -w /etc/cron.allow -p wa -k cron
-    auditctl -w /etc/cron.deny -p wa -k cron
-    auditctl -w /etc/cron.d/ -p wa -k cron
-    auditctl -w /etc/cron.daily/ -p wa -k cron
-    auditctl -w /etc/cron.hourly/ -p wa -k cron
-    auditctl -w /etc/crontab -p wa -k cron
-    auditctl -w /etc/sudoers -p wa -k sudoers
-    auditctl -w /etc/sudoers.d/ -p wa -k sudoers
-    auditctl -w /usr/sbin/groupadd -p x -k group_add
-    auditctl -w /usr/sbin/groupmod -p x -k group_mod
-    auditctl -w /usr/sbin/addgroup -p x -k add_group
-    auditctl -w /usr/sbin/useradd -p x -k user_add
-    auditctl -w /usr/sbin/userdel -p x -k user_del
-    auditctl -w /usr/sbin/usermod -p x -k user_mod
-    auditctl -w /usr/sbin/adduser -p x -k add_user
-    auditctl -w /etc/login.defs -p wa -k login
-    auditctl -w /etc/securetty -p wa -k login
-    auditctl -w /var/log/faillog -p wa -k login
-    auditctl -w /var/log/lastlog -p wa -k login
-    auditctl -w /var/log/tallylog -p wa -k login
-    auditctl -w /etc/passwd -p wa -k users
-    auditctl -w /etc/shadow -p wa -k users
-    auditctl -w /etc/sudoers -p wa -k users
-    auditctl -w /bin/rmdir -p x -k directory
-    auditctl -w /bin/mkdir -p x -k directory
-    auditctl -w /usr/bin/passwd -p x -k passwd
-    auditctl -w /usr/bin/vim -p x -k text
-    auditctl -w /bin/nano -p x -k text
-    auditctl -w /usr/bin/pico -p x -k text
-
-	if [ $distro != *alpine* ]; then
-		systemctl restart auditd 
+    cat <<EOL > /etc/audit/audit.rules
+    -w /etc/audit/ -p wa -k auditconfig
+    -w /etc/libaudit.conf -p wa -k auditconfig
+    -w /etc/audisp/ -p wa -k audispconfig
+    -w /etc/sysctl.conf -p wa -k sysctl
+    -w /etc/sysctl.d -p wa -k sysctl
+    -w /etc/cron.allow -p wa -k cron
+    -w /etc/cron.deny -p wa -k cron
+    -w /etc/cron.d/ -p wa -k cron
+    -w /etc/cron.daily/ -p wa -k cron
+    -w /etc/cron.hourly/ -p wa -k cron
+    -w /etc/crontab -p wa -k cron
+    -w /etc/sudoers -p wa -k sudoers
+    -w /etc/sudoers.d/ -p wa -k sudoers
+    -w /usr/sbin/groupadd -p x -k group_add
+    -w /usr/sbin/groupmod -p x -k group_mod
+    -w /usr/sbin/addgroup -p x -k add_group
+    -w /usr/sbin/useradd -p x -k user_add
+    -w /usr/sbin/userdel -p x -k user_del
+    -w /usr/sbin/usermod -p x -k user_mod
+    -w /usr/sbin/adduser -p x -k add_user
+    -w /etc/login.defs -p wa -k login
+    -w /etc/securetty -p wa -k login
+    -w /var/log/faillog -p wa -k login
+    -w /var/log/lastlog -p wa -k login
+    -w /var/log/tallylog -p wa -k login
+    -w /etc/passwd -p wa -k users
+    -w /etc/shadow -p wa -k users
+    -w /etc/sudoers -p wa -k users
+    -w /bin/rmdir -p x -k directory
+    -w /bin/mkdir -p x -k directory
+    -w /usr/bin/passwd -p x -k passwd
+    -w /usr/bin/vim -p x -k text
+    -w /bin/nano -p x -k text
+    -w /usr/bin/pico -p x -k text
+    EOL
+    
+    if [ $distro != *alpine* ]; then
+        systemctl restart auditd 
     else
-		rc-service auditd restart
+        rc-service auditd restart
     fi
     
     echo "[Completed auditd]"
