@@ -7,15 +7,15 @@ update() {
 
     case $distro in
         *ubuntu* | *debian* | *mint*)
-            apt-get update > /dev/null 
-            apt-get -y upgrade > /dev/null 
+            apt update > /dev/null 
+            apt -y upgrade > /dev/null 
             ;;
-        *centos* | *rhel* | *fedora*)
+        *centos* | *fedora*)
             yum -y update > /dev/null 
             ;;
         *opensuse*)
             zypper refresh > /dev/null
-            zypper update > /dev/null
+            zypper update -y > /dev/null
             ;;
         *alpine*)
             apk update > /dev/null 
@@ -23,7 +23,7 @@ update() {
             ;;
         *)
             echo "Error updating packages. Moving on..."
-            return 1
+            return
             ;;
     esac
     
@@ -35,19 +35,19 @@ clean_packages() {
 
     case $distro in
         *ubuntu* | *debian* | *mint*)
-            apt-get install -y deborphan > /dev/null 
-            deborphan --guess-data | xargs apt-get -y remove --purge  > /dev/null 
-            deborphan | xargs apt-get -y remove --purge  > /dev/null 
+            apt install -y deborphan > /dev/null 
+            deborphan --guess-data | xargs apt -y remove --purge  > /dev/null 
+            deborphan | xargs apt -y remove --purge  > /dev/null 
             ;;
-        *centos* | *rhel* | *fedora*)
+        *centos* | *fedora*)
             yum -y autoremove > /dev/null
             ;;
         *opensuse*)
-            zypper packages --orphaned | grep -E '^[ivcud]' | awk '{print $5}' | xargs zypper remove --clean-deps > /dev/null
+            zypper packages --orphaned | grep -E '^[ivcud]' | awk '{print $5}' | xargs zypper remove -y --clean-deps > /dev/null
             ;;
         *)
             echo "Error cleaning up packages. Moving on..."
-            return 1
+            return
             ;;
     esac
 
@@ -61,7 +61,7 @@ enumerate() {
     echo "[Running enumerate] Enumerating system information. Writing to fh.txt..."
     echo "========== ENUMERATION ==========" >> fh.txt
 
-    # OS
+    # OS information
     hostname=$(hostname)    
     echo "Hostname: $hostname" >> fh.txt
 
@@ -69,7 +69,7 @@ enumerate() {
     echo "OS Information:" >> fh.txt
     echo "$os_info" >> fh.txt
 
-    # Network
+    # Network information
     interfaces=$(ip a | grep -v "lo" | grep "UP" | awk '{print $2}' | cut -d ":" -f1)
     declare -A ip_addresses
     declare -A mac_addresses
@@ -85,11 +85,11 @@ enumerate() {
         done
     } >> fh.txt
 
-    # Users
+    # List users
     echo -e "\nUsers:" >> fh.txt
-    getent passwd | awk -F: '/\/(bash|sh)$/ { print $1 }' >> fh.txt
+    getent passwd | awk -F: '/\/(bash|sh)$/ {print $1}' >> fh.txt
 
-    # Groups
+    # List groups, delete groups with no users
     echo -e "\nGroups:" >> fh.txt
     while IFS=: read -r group_name _ _ user_list; do
         if [ -n "$user_list" ]; then
@@ -179,12 +179,39 @@ firewall() {
 
     case $distro in
         *ubuntu* | *debian* | *mint*)
-            apt-get install -y ufw > /dev/null 
+            apt install -y ufw > /dev/null 
             ufw allow ssh
+            ufw default deny incoming
+            ufw default allow outgoing
             ufw logging on 
-            ufw enable 
+            ufw enable
+            ufw reload
             ;;
-        *centos* | *rhel* | *fedora* | *opensuse* | *alpine*)
+        *centos* | *fedora*)
+            yum remove firewalld > /dev/null
+            yum install -y ufw > /dev/null
+            ufw allow ssh
+            ufw default deny incoming
+            ufw default allow outgoing
+            ufw logging on 
+            echo "y" | ufw enable
+            ufw reload
+            ;;
+        *opensuse*)
+            zypper install firewalld > /dev/null
+            systemctl enable firewalld
+            systemctl start firewalld 
+            
+            systemctl stop firewalld
+            systemctl disable firewalld
+            yum remove firewalld
+            yum install -y ufw > /dev/null
+            ufw allow ssh
+            ufw logging on
+            echo "y" | ufw enable
+            ;;
+        
+        *opensuse*)
             iptables -P INPUT DROP
             iptables -P FORWARD DROP
             iptables -A INPUT -p tcp --dport 22 -j ACCEPT
@@ -201,7 +228,7 @@ firewall() {
             ;;
         *)
             echo "Error setting up ufw/iptables. Moving on..."
-            return 1
+            return
             ;;
     esac
 
@@ -212,26 +239,38 @@ fail2ban() {
     echo "[Running fail2ban] Installing and starting fail2ban..."
     case $distro in
         *ubuntu* | *debian* | *mint*)
-            apt-get install -y fail2ban > /dev/null 
+            apt install -y fail2ban > /dev/null 
             ;;
-        *centos* | *rhel* | *fedora*)
-            yum install -y epel-release > /dev/null 
+        *centos* | *fedora*)
             yum install -y fail2ban > /dev/null 
             ;;
         *opensuse*)
             zypper install -y fail2ban > /dev/null 
             ;;
         *alpine*)
-            apk add fail2ban > /dev/null 
+            apk add fail2ban > /dev/null
+            rc-update add fail2ban
+            rc-service fail2ban start
+            echo '[sshd]
+                enabled = true
+                port = ssh
+                filter = sshd
+                logpath = /var/log/messages
+                backend = auto
+                maxretry = 3
+                bantime = 1d
+                ignoreip = 127.0.0.1' > /etc/fail2ban/jail.local
+            rc-service fail2ban start
+            return
             ;;
         *)
             echo "Error installing fail2ban. Moving on..."
-            return 1
+            return
             ;;
     esac
 
     systemctl start fail2ban
-    systemctl enable fail2ban
+    systemctl enable fail2ban > /dev/null
 
     echo '[sshd]
     enabled = true
@@ -256,9 +295,9 @@ auditd() {
 
     case $distro in
         *ubuntu* | *debian* | *mint*)
-            apt-get install -y auditd > /dev/null
+            apt install -y auditd > /dev/null
             ;;
-        *centos* | *rhel* | *fedora*)
+        *centos* | *fedora*)
             yum install -y auditd > /dev/null 
             ;;
         *opensuse*)
@@ -281,42 +320,40 @@ auditd() {
     fi
 
     auditctl -e 1 > /dev/null 
-    cat <<EOL > /etc/audit/audit.rules
-    -w /etc/audit/ -p wa -k auditconfig
-    -w /etc/libaudit.conf -p wa -k auditconfig
-    -w /etc/audisp/ -p wa -k audispconfig
-    -w /etc/sysctl.conf -p wa -k sysctl
-    -w /etc/sysctl.d -p wa -k sysctl
-    -w /etc/cron.allow -p wa -k cron
-    -w /etc/cron.deny -p wa -k cron
-    -w /etc/cron.d/ -p wa -k cron
-    -w /etc/cron.daily/ -p wa -k cron
-    -w /etc/cron.hourly/ -p wa -k cron
-    -w /etc/crontab -p wa -k cron
-    -w /etc/sudoers -p wa -k sudoers
-    -w /etc/sudoers.d/ -p wa -k sudoers
-    -w /usr/sbin/groupadd -p x -k group_add
-    -w /usr/sbin/groupmod -p x -k group_mod
-    -w /usr/sbin/addgroup -p x -k add_group
-    -w /usr/sbin/useradd -p x -k user_add
-    -w /usr/sbin/userdel -p x -k user_del
-    -w /usr/sbin/usermod -p x -k user_mod
-    -w /usr/sbin/adduser -p x -k add_user
-    -w /etc/login.defs -p wa -k login
-    -w /etc/securetty -p wa -k login
-    -w /var/log/faillog -p wa -k login
-    -w /var/log/lastlog -p wa -k login
-    -w /var/log/tallylog -p wa -k login
-    -w /etc/passwd -p wa -k users
-    -w /etc/shadow -p wa -k users
-    -w /etc/sudoers -p wa -k users
-    -w /bin/rmdir -p x -k directory
-    -w /bin/mkdir -p x -k directory
-    -w /usr/bin/passwd -p x -k passwd
-    -w /usr/bin/vim -p x -k text
-    -w /bin/nano -p x -k text
-    -w /usr/bin/pico -p x -k text
-    EOL
+    auditctl -w /etc/audit/ -p wa -k auditconfig
+    auditctl -w /etc/libaudit.conf -p wa -k auditconfig
+    auditctl -w /etc/audisp/ -p wa -k audispconfig
+    auditctl -w /etc/sysctl.conf -p wa -k sysctl
+    auditctl -w /etc/sysctl.d -p wa -k sysctl
+    auditctl -w /etc/cron.allow -p wa -k cron
+    auditctl -w /etc/cron.deny -p wa -k cron
+    auditctl -w /etc/cron.d/ -p wa -k cron
+    auditctl -w /etc/cron.daily/ -p wa -k cron
+    auditctl -w /etc/cron.hourly/ -p wa -k cron
+    auditctl -w /etc/crontab -p wa -k cron
+    auditctl -w /etc/sudoers -p wa -k sudoers
+    auditctl -w /etc/sudoers.d/ -p wa -k sudoers
+    auditctl -w /usr/sbin/groupadd -p x -k group_add
+    auditctl -w /usr/sbin/groupmod -p x -k group_mod
+    auditctl -w /usr/sbin/addgroup -p x -k add_group
+    auditctl -w /usr/sbin/useradd -p x -k user_add
+    auditctl -w /usr/sbin/userdel -p x -k user_del
+    auditctl -w /usr/sbin/usermod -p x -k user_mod
+    auditctl -w /usr/sbin/adduser -p x -k add_user
+    auditctl -w /etc/login.defs -p wa -k login
+    auditctl -w /etc/securetty -p wa -k login
+    auditctl -w /var/log/faillog -p wa -k login
+    auditctl -w /var/log/lastlog -p wa -k login
+    auditctl -w /var/log/tallylog -p wa -k login
+    auditctl -w /etc/passwd -p wa -k users
+    auditctl -w /etc/shadow -p wa -k users
+    auditctl -w /etc/sudoers -p wa -k users
+    auditctl -w /bin/rmdir -p x -k directory
+    auditctl -w /bin/mkdir -p x -k directory
+    auditctl -w /usr/bin/passwd -p x -k passwd
+    auditctl -w /usr/bin/vim -p x -k text
+    auditctl -w /bin/nano -p x -k text
+    auditctl -w /usr/bin/pico -p x -k text
     
     if [ $distro != *alpine* ]; then
         systemctl restart auditd 
@@ -336,7 +373,6 @@ ips() {
     sysctl -w net.ipv6.conf.all.disable_ipv6=1
     sysctl -w net.ipv6.conf.default.disable_ipv6=1
     sysctl -w net.ipv4.ip_forward=0
-    echo "nospoof on" >> /etc/host.conf
 
     echo "[Completed ips]"
 }
@@ -345,9 +381,6 @@ cron() {
     echo "[Running cron] Denying users ability to use cron jobs..."
 
     echo "ALL" >> /etc/cron.deny
-    if [ -f "/etc/rc.local" ]; then
-        echo "exit 0" > /etc/rc.local
-    fi
 
     echo "[Completed cron]"
 }
@@ -367,7 +400,7 @@ change_bin() {
 modules() {
     echo "[Running modules] Disable ability to load new modules..."
 
-    sysctl -w kernel.modules_disabled=1
+    sysctl -w kernel.modules_disabled=1 > /dev/null
     echo 'kernel.modules_disabled=1' > /etc/sysctl.conf
 
     echo "[Running modules]"
@@ -377,19 +410,19 @@ modules() {
 # Antivirus 
 # =======================================================================================
 clamav() {
-    echo "[Running clamav] Running clamav scan. Writing to first_hour.txt..."
+    echo "[Running clamav] Running clamav scan. Writing to fh.txt..."
 
     case $distro in
-        "ubuntu" | "debian" | "mint")
-   		    apt-get install clamav clamav-daemon
+        *ubuntu* | *debian* | *mint*)
+   		    apt-get install -y clamav clamav-daemon > /dev/null
    		    ;;
-   	    "centos" | "rhel" | "fedora")
-   		    yum install clamav clamav-server
+   	    *centos* | *fedora*)
+   		    yum install -y clamav clamav-server > /dev/null
    		    ;;
-   	    "opensuse")
-   		    zypper install clamav clamav-daemon
+   	    *opensuse*)
+   		    zypper install -y clamav clamav-daemon > /dev/null
    		    ;;
-   	    "alpine")
+   	    *alpine*)
    		    apk add clamav clamav-daemon
    		    ;;
    	    *)
@@ -398,29 +431,31 @@ clamav() {
    		    ;;
     esac
 
-    echo -e "\n========== ClamAV Scan ==========" >> first_hour.txt
-    freshclam
-    clamscan -ri --move=/tmp/virus /home/ /bin/ /sbin/ /usr/bin/ /usr/sbin/ /etc/ /tmp/ /var/tmp/ >> first_hour.txt 2>/dev/null
-    crontab -l | echo "clamscan -ri --move=/tmp/virus /home/ /bin/ /sbin/ /usr/bin/ /usr/sbin/ /etc/ /tmp/ /var/tmp/ >> /tmp/clamav 2>/dev/null" | crontab -
+    echo -e "\n========== ClamAV Scan ==========" >> fh.txt
+    systemctl stop clamav-freshclam.service
+    freshclam > /dev/null
+    mkdir /tmp/virus
+    clamscan -ri --move=/tmp/virus /home/ /bin/ /sbin/ /usr/bin/ /usr/sbin/ /etc/ /tmp/ /var/tmp/ >> fh.txt 2>/dev/null
+    crontab -l | echo "0 * * * * /usr/bin/clamscan -ri --move=/tmp/virus /home/ /bin/ /sbin/ /usr/bin/ /usr/sbin/ /etc/ /tmp/ /var/tmp/ >> /tmp/clamscan/clamscan.txt" | crontab -
 
-    echo "[Completed clamav] Results in first_hour.txt"
+    echo "[Completed clamav] Results in fh.txt"
 }
 
 chkrootkit() {
-    echo "[Running chkrootkit] Checking for rootkits. Writing to first_hour.txt..."
+    echo "[Running chkrootkit] Checking for rootkits. Writing to fh.txt..."
 
     case $distro in
-        "ubuntu" | "debian" | "mint")
-            apt-get install -y chkrootkit
+        *ubuntu* | *debian* | *mint*)
+            apt-get install -y chkrootkit > /dev/null
    		    ;;
-   	    "centos" | "rhel" | "fedora")
-   		    yum install -y chkrootkit
+   	    *centos* | *fedora*)
+   		    yum install -y chkrootkit > /dev/null
    		    ;;
-   	    "opensuse")
-   		    zypper install chkrootkit
+   	    *opensuse*)
+   		    zypper install -y chkrootkit > /dev/null
    		    ;;
-   	    "alpine")
-   		    apk add chkrootkit
+   	    *alpine*)
+   		    apk add chkrootkit > /dev/null
    		    ;;
    	    *)
    		    echo "Error checking for rootkits. Moving on..."
@@ -428,28 +463,28 @@ chkrootkit() {
    		    ;;
     esac
 
-    echo -e "\n========== Chkrootkit Reulsts ==========" >> first_hour.txt
-    chkrootkit | grep -E 'INFECTED|suspicious' >> first_hour.txt
+    echo -e "\n========== Chkrootkit ==========" >> fh.txt
+    chkrootkit | grep -E 'INFECTED|suspicious' >> fh.txt
 
-    echo "[Completed chkrootkit] Results in first_hour.txt"
+    echo "[Completed chkrootkit] Results in fh.txt"
 }
 
 debsums() {
     echo "[Running debsums] Running debsums and reinstalling as needed..."
 
     case $distro in
-   	    "ubuntu" | "debian" | "mint")
-   		    apt-get install debsums
+   	    *ubuntu* | *debian* | *mint*)
+   		    apt-get install -y debsums > /dev/null
    		    debsums -g
    		    apt-get install --reinstall $(dpkg -S $(debsums -c) | cut -d : -f 1 | sort -u)
    		    ;;
-   	    "centos" | "rhel" | "fedora")
+   	    *centos* | *fedora*)
    		    yum reinstall $(rpm -qf $(rpm -Va --nofiles --noscripts --nodigest | awk '$1 ~ /^.M/{print $2}'))
    		    ;;
-   	    "opensuse")
+   	    *opensuse*)
    		    zypper install --force --replacepkgs --from <repository> $(zypper verify -r 2>&1 | awk '/ERROR:/{print $4}')
    		    ;;
-   	    "alpine")
+   	    *alpine*)
    		    apk add --upgrade --available --reinstall $(apk verify -c 2>&1 | awk '/ERROR:/{print $3}')
    		    ;;
    	    *)
@@ -465,14 +500,14 @@ rpcbind() {
     echo "[Running rpcbind] Disabling rpcbind..."
 
     case $distro in
-        "ubuntu" | "debian" | "mint" | "centos" | "rhel" | "fedora" | "opensuse")
+        *ubuntu* | *debian* | *mint* | *centos* | *fedora* | *opensuse*)
             systemctl disable rpcbind
    		    systemctl stop rpcbind
    		    systemctl mask rpcbind
    		    systemctl stop rpcbind.socket
    		    systemctl disable rpcbind.socket
    		    ;;
-        "alpine")
+        *alpine*)
             rc-update del rpcbind
    		    rc-service rpcbind stop
    		    ;;
@@ -489,17 +524,17 @@ rkhunter() {
     echo "[Running rkhunter] Checking for rootkits. Writes to /var/log/rkhunter.log..."
 
     case $distro in
-        "ubuntu" | "debian" | "mint")
-            apt-get -y install rkhunter
+        *ubuntu* | *debian* | *mint*)
+            apt-get -y install rkhunter > /dev/null
             ;;
-        "centos" | "rhel" | "fedora")
-            yum -y install rkhunter
+        *centos* | *fedora*)
+            yum -y install rkhunter > /dev/null
             ;;
-        "opensuse")
-            zypper -y install rkhunter
+        *opensuse*)
+            zypper -y install rkhunter > /dev/null
             ;;
-        "alpine")
-            apk add rkhunter
+        *alpine*)
+            apk add rkhunter > /dev/null
             ;;
         *)
             echo "Error running rkhunter. Moving on..."
