@@ -3,15 +3,15 @@
 # Package Management
 # =======================================================================================
 update() {
-    echo "[Running update] Updating packages..."
+    echo -e "\n[Running update] Updating packages..."
 
     case $distro in
         *ubuntu* | *debian* | *mint*)
             apt update > /dev/null 
-            apt -y upgrade > /dev/null 
+            apt upgrade -y > /dev/null 
             ;;
         *centos* | *fedora*)
-            yum -y update > /dev/null 
+            yum update -y > /dev/null 
             ;;
         *opensuse*)
             zypper refresh > /dev/null
@@ -31,7 +31,7 @@ update() {
 }
 
 clean_packages() {
-    echo "[Running clean_packages] Cleaning up unnecessary packages..."
+    echo -e "\n[Running clean_packages] Cleaning up unnecessary packages..."
 
     case $distro in
         *ubuntu* | *debian* | *mint*)
@@ -54,11 +54,23 @@ clean_packages() {
     echo "[Completed clean_packages]"
 }
 
+run_debsums() {
+    echo -e "\n[Running run_debsums] Running debsums and reinstalling as needed..."
+
+    if [ $distro != *ubuntu* ] || [ $distro != *debian* ] || [ $distro != *mint* ]; then
+		apt install -y debsums > /dev/null
+   		debsums -g
+   		apt install --reinstall $(dpkg -S $(debsums -c) | cut -d : -f 1 | sort -u)
+    fi
+
+    echo "[Completed run_debsums]"
+}
+
 
 # Enumeration
 # =======================================================================================
 enumerate() {
-    echo "[Running enumerate] Enumerating system information. Writing to fh.txt..."
+    echo -e "\n[Running enumerate] Enumerating system information. Writing to fh.txt..."
     echo "========== ENUMERATION ==========" >> fh.txt
 
     # OS information
@@ -85,21 +97,21 @@ enumerate() {
         done
     } >> fh.txt
 
+    # Network connections
+    echo -e "\nNetwork Connections:" >> fh.txt
+    netstat -tulpna >> fh.txt
+
     # List users
     echo -e "\nUsers:" >> fh.txt
     getent passwd | awk -F: '/\/(bash|sh)$/ {print $1}' >> fh.txt
+    getent passwd | awk -F: '/\/(bash|sh)$/ {print $1}' >> /etc/cron.deny
 
-    # List groups, delete groups with no users
+    # List groups
     echo -e "\nGroups:" >> fh.txt
-    while IFS=: read -r group_name _ _ user_list; do
-        if [ -n "$user_list" ]; then
-            echo "Group: $group_name" >> fh.txt
-            echo "Users: $user_list" >> fh.txt
-        else
-            echo "Deleting group: $group_name" >> fh.txt
-            groupdel "$group_name" 2>/dev/null
-        fi
-    done < <(cat /etc/group)
+    getent group | awk -F: '{print $1}' | while read -r group; do
+        echo "Group: $group" >> fh.txt
+        echo "Users: $(getent group "$group" | awk -F: '{print $4}')" >> fh.txt
+    done
 
     # Cron jobs
     echo -e "\nCron Jobs:" >> fh.txt
@@ -120,7 +132,7 @@ enumerate() {
 # User Accounts
 # =======================================================================================
 manage_acc() {
-    echo "[Running manage_acc] Changing user passwords and locking accounts (except for yourself and root)..."
+    echo -e "\n[Running manage_acc] Changing user passwords and locking accounts (except for yourself and root)..."
 
     current_user=$(echo $SUDO_USER)
     for user in $(awk -F':' '$1 != "root" && $1 != "'"$current_user"'" && $7 != "/sbin/nologin" && $7 != "/bin/false" {print $1}' /etc/passwd); do
@@ -140,7 +152,7 @@ manage_acc() {
 # SSH
 # =======================================================================================
 configure_ssh() {
-    echo "[Running configure_ssh] Updating SSH configuration file..."
+    echo -e "\n[Running configure_ssh] Updating SSH configuration file..."
 
     if [ -f /etc/ssh/sshd_config ]; then
 
@@ -175,7 +187,7 @@ configure_ssh() {
 # Firewall
 # =======================================================================================
 firewall() {
-    echo "[Running firewall] Installing and allowing ssh in ufw or iptables..."
+    echo -e "\n[Running firewall] Installing and allowing ssh in ufw or iptables..."
 
     case $distro in
         *ubuntu* | *debian* | *mint*)
@@ -186,9 +198,11 @@ firewall() {
             ufw logging on 
             ufw enable
             ufw reload
+            systemctl start ufw
+            systemctl enable ufw
             ;;
         *centos* | *fedora*)
-            yum remove firewalld > /dev/null
+            yum install -y epel-release > /dev/null
             yum install -y ufw > /dev/null
             ufw allow ssh
             ufw default deny incoming
@@ -196,21 +210,9 @@ firewall() {
             ufw logging on 
             echo "y" | ufw enable
             ufw reload
+            systemctl start ufw
+            systemctl enable ufw
             ;;
-        *opensuse*)
-            zypper install firewalld > /dev/null
-            systemctl enable firewalld
-            systemctl start firewalld 
-            
-            systemctl stop firewalld
-            systemctl disable firewalld
-            yum remove firewalld
-            yum install -y ufw > /dev/null
-            ufw allow ssh
-            ufw logging on
-            echo "y" | ufw enable
-            ;;
-        
         *opensuse*)
             iptables -P INPUT DROP
             iptables -P FORWARD DROP
@@ -235,8 +237,11 @@ firewall() {
     echo "[Completed firewall]"
 }
 
+
+# Logging
+# =======================================================================================
 fail2ban() {
-    echo "[Running fail2ban] Installing and starting fail2ban..."
+    echo -e "\n[Running fail2ban] Installing and starting fail2ban..."
     case $distro in
         *ubuntu* | *debian* | *mint*)
             apt install -y fail2ban > /dev/null 
@@ -286,19 +291,16 @@ fail2ban() {
     echo "[Completed fail2ban]"
 }
 
-
-# Logging
-# =======================================================================================
 auditd() {
     # /etc/audit/auditd.conf
-    echo "[Running auditd] Installing and setting rules for auditd..."
+    echo -e "\n[Running auditd] Installing and setting rules for auditd..."
 
     case $distro in
         *ubuntu* | *debian* | *mint*)
             apt install -y auditd > /dev/null
             ;;
         *centos* | *fedora*)
-            yum install -y auditd > /dev/null 
+            yum install -y audit > /dev/null 
             ;;
         *opensuse*)
             zypper install -y audit > /dev/null 
@@ -308,10 +310,10 @@ auditd() {
             ;;
         *)
             echo "Error installing auditd. Moving on..."
-            return 1
+            return
     esac
 
-    if [ $distro != *alpine* ]; then
+    if [[ $distro != *alpine* ]]; then
 		systemctl start auditd
 		systemctl enable auditd > /dev/null 
     else
@@ -355,12 +357,6 @@ auditd() {
     auditctl -w /bin/nano -p x -k text
     auditctl -w /usr/bin/pico -p x -k text
     
-    if [ $distro != *alpine* ]; then
-        systemctl restart auditd 
-    else
-        rc-service auditd restart
-    fi
-    
     echo "[Completed auditd]"
 }
 
@@ -368,7 +364,7 @@ auditd() {
 # Configs
 # =======================================================================================
 ips() {
-    echo "[Running ips] Disabling ipv6 and ip forwarding..."
+    echo -e "\n[Running ips] Disabling ipv6 and ip forwarding..."
 
     sysctl -w net.ipv6.conf.all.disable_ipv6=1
     sysctl -w net.ipv6.conf.default.disable_ipv6=1
@@ -377,44 +373,63 @@ ips() {
     echo "[Completed ips]"
 }
 
-cron() {
-    echo "[Running cron] Denying users ability to use cron jobs..."
-
-    echo "ALL" >> /etc/cron.deny
-
-    echo "[Completed cron]"
-}
-
 change_bin() {
-    echo "[Running change_bin] Deleting telnet, nc; changing to curlbk, wgetbk..."
+    echo -e "\n[Running change_bin] Deleting telnet, nc; changing to curlbk, wgetbk..."
 
-    rm $(which telnet)
-    rm $(which nc)
+    rm $(which telnet) 2>/dev/null
+    rm $(which nc) 2>/dev/null
 
-    mv $(which curl){,bk}
-    mv $(which wget){,bk}
+    mv $(which curl){,bk} 2>/dev/null
+    mv $(which wget){,bk} 2>/dev/null
 
     echo "[Completed change_bin]"
 }
 
 modules() {
-    echo "[Running modules] Disable ability to load new modules..."
+    echo -e "\n[Running modules] Disable ability to load new modules..."
 
     sysctl -w kernel.modules_disabled=1 > /dev/null
     echo 'kernel.modules_disabled=1' > /etc/sysctl.conf
 
-    echo "[Running modules]"
+    echo "[Completed modules]"
+}
+
+rpcbind() {
+    echo -e "\n[Running rpcbind] Disabling rpcbind..."
+
+    case $distro in
+        *ubuntu* | *debian* | *mint* | *centos* | *fedora* | *opensuse*)
+            systemctl stop rpcbind 2>/dev/null
+            systemctl stop rpcbind.socket 2>/dev/null
+            systemctl stop rpcbind.service 2>/dev/null
+            systemctl disable rpcbind 2>/dev/null
+            systemctl disable rpcbind.socket 2>/dev/null
+            systemctl disable rpcbind.service 2>/dev/null
+   		    systemctl mask rpcbind  2>/dev/null
+   		    ;;
+        *alpine*)
+            rc-service rpcbind stop 2>/dev/null
+            rc-update del rpcbind 2>/dev/null
+            apk del rpcbind 2>/dev/null
+   		    ;;
+   	    *)
+            echo "Error disabling rpcbind. Moving on..."
+            return
+   		    ;;
+    esac
+    
+    echo "[Completed rpcbind]"
 }
 
 
 # Antivirus 
 # =======================================================================================
-clamav() {
-    echo "[Running clamav] Running clamav scan. Writing to fh.txt..."
+run_clamav() {
+    echo -e "\n[Running clamav] Running clamav scan. Writing to fh.txt..."
 
     case $distro in
         *ubuntu* | *debian* | *mint*)
-   		    apt-get install -y clamav clamav-daemon > /dev/null
+   		    apt install -y clamav clamav-daemon > /dev/null
    		    ;;
    	    *centos* | *fedora*)
    		    yum install -y clamav clamav-server > /dev/null
@@ -423,43 +438,51 @@ clamav() {
    		    zypper install -y clamav clamav-daemon > /dev/null
    		    ;;
    	    *alpine*)
-   		    apk add clamav clamav-daemon
+   		    apk add clamav clamav-daemon > /dev/null
    		    ;;
    	    *)
    		    echo "Error running clamav scan. Moving on..."
-            return 1
+            return
    		    ;;
     esac
 
+    if [[ $distro != *alpine* ]]; then
+		systemctl start clamav-freshclam
+    else
+		rc-service clamd start
+		rc-update add clamd
+    fi
+
     echo -e "\n========== ClamAV Scan ==========" >> fh.txt
-    systemctl stop clamav-freshclam.service
     freshclam > /dev/null
     mkdir /tmp/virus
-    clamscan -ri --move=/tmp/virus /home/ /bin/ /sbin/ /usr/bin/ /usr/sbin/ /etc/ /tmp/ /var/tmp/ >> fh.txt 2>/dev/null
-    crontab -l | echo "0 * * * * /usr/bin/clamscan -ri --move=/tmp/virus /home/ /bin/ /sbin/ /usr/bin/ /usr/sbin/ /etc/ /tmp/ /var/tmp/ >> /tmp/clamscan/clamscan.txt" | crontab -
+    clamscan -ri --remove --move=/tmp/virus /home/ /bin/ /sbin/ /usr/bin/ /usr/sbin/ /etc/ /tmp/ /var/tmp/ >> fh.txt 2>/dev/null
 
     echo "[Completed clamav] Results in fh.txt"
 }
 
-chkrootkit() {
-    echo "[Running chkrootkit] Checking for rootkits. Writing to fh.txt..."
+run_chkrootkit() {
+    echo -e "\n[Running chkrootkit] Checking for rootkits. Writing to fh.txt..."
 
     case $distro in
         *ubuntu* | *debian* | *mint*)
-            apt-get install -y chkrootkit > /dev/null
+            apt install -y chkrootkit > /dev/null
    		    ;;
    	    *centos* | *fedora*)
-   		    yum install -y chkrootkit > /dev/null
+   		    wgetbk ftp://ftp.chkrootkit.org/pub/seg/pac/chkrootkit.tar.gz -O chkroot.tar.gz > /dev/null
+            yum install -y tar > /dev/null
+            tar -xf chkroot.tar.gz
+            mv chkrootkit*/chkrootkit chkrootkit
    		    ;;
-   	    *opensuse*)
-   		    zypper install -y chkrootkit > /dev/null
-   		    ;;
-   	    *alpine*)
-   		    apk add chkrootkit > /dev/null
-   		    ;;
+        *opensuse*)
+            wgetbk ftp://ftp.chkrootkit.org/pub/seg/pac/chkrootkit.tar.gz -O chkroot.tar.gz > /dev/null
+            zypper install -y tar > /dev/null
+            tar -xf chkroot.tar.gz
+            mv chkrootkit*/chkrootkit chkrootkit
+            ;;
    	    *)
    		    echo "Error checking for rootkits. Moving on..."
-            return 1
+            return
    		    ;;
     esac
 
@@ -469,102 +492,50 @@ chkrootkit() {
     echo "[Completed chkrootkit] Results in fh.txt"
 }
 
-debsums() {
-    echo "[Running debsums] Running debsums and reinstalling as needed..."
-
-    case $distro in
-   	    *ubuntu* | *debian* | *mint*)
-   		    apt-get install -y debsums > /dev/null
-   		    debsums -g
-   		    apt-get install --reinstall $(dpkg -S $(debsums -c) | cut -d : -f 1 | sort -u)
-   		    ;;
-   	    *centos* | *fedora*)
-   		    yum reinstall $(rpm -qf $(rpm -Va --nofiles --noscripts --nodigest | awk '$1 ~ /^.M/{print $2}'))
-   		    ;;
-   	    *opensuse*)
-   		    zypper install --force --replacepkgs --from <repository> $(zypper verify -r 2>&1 | awk '/ERROR:/{print $4}')
-   		    ;;
-   	    *alpine*)
-   		    apk add --upgrade --available --reinstall $(apk verify -c 2>&1 | awk '/ERROR:/{print $3}')
-   		    ;;
-   	    *)
-   		    echo "Error verifying files. Moving on..."
-            return 1
-   		    ;;
-    esac
-
-    echo "[Completed debsums]"
-}
-
-rpcbind() {
-    echo "[Running rpcbind] Disabling rpcbind..."
-
-    case $distro in
-        *ubuntu* | *debian* | *mint* | *centos* | *fedora* | *opensuse*)
-            systemctl disable rpcbind
-   		    systemctl stop rpcbind
-   		    systemctl mask rpcbind
-   		    systemctl stop rpcbind.socket
-   		    systemctl disable rpcbind.socket
-   		    ;;
-        *alpine*)
-            rc-update del rpcbind
-   		    rc-service rpcbind stop
-   		    ;;
-   	    *)
-            echo "Error disabling rpcbind. Moving on..."
-            return 1
-   		    ;;
-    esac
-    
-    echo "[Completed rpcbind]"
-}
-
-rkhunter() {
-    echo "[Running rkhunter] Checking for rootkits. Writes to /var/log/rkhunter.log..."
+run_rkhunter() {
+    echo -e "\n[Running rkhunter] Checking for rootkits. Writes to /var/log/rkhunter/rkhunter.log..."
 
     case $distro in
         *ubuntu* | *debian* | *mint*)
-            apt-get -y install rkhunter > /dev/null
+            apt install -y rkhunter > /dev/null
             ;;
         *centos* | *fedora*)
-            yum -y install rkhunter > /dev/null
+            yum install -y rkhunter > /dev/null
             ;;
         *opensuse*)
-            zypper -y install rkhunter > /dev/null
-            ;;
-        *alpine*)
-            apk add rkhunter > /dev/null
+            zypper install -y rkhunter > /dev/null
             ;;
         *)
             echo "Error running rkhunter. Moving on..."
-            return 1
+            return
             ;;
     esac
 
-    rkhunter --update
-    rkhunter --propupd
-    rkhunter -c --enable all --disable none --sk
+    rkhunter --update > /dev/null
+    rkhunter --propupd > /dev/null
+    rkhunter -c --enable all --disable none --sk > /dev/null
 
-    echo "[Completed rkhunter] Results in /var/log/rkhunter.log"
+    echo "[Completed rkhunter] Results in /var/log/rkhunter/rkhunter.log"
 }
 
 
 # Backups
 # =======================================================================================
-backup_configs() {
-    echo "[Running backup_configs] Backing up files..."
+backup() {
+    echo -e "\n[Running backup] Backing up files in /var/backups..."
     
     mkdir -p /var/backups
-    cp -r /etc/pam* /var/backups
-    cp -r /lib/security* /var/backups
-    cp -r /etc /var/backups
+    cp -r /etc/pam* /var/backups 2>/dev/null
+    cp -r /lib/security* /var/backups 2>/dev/null
+    cp -r /etc /var/backups 2>/dev/null
 
     if [ -d "/var/www" ]; then
-        cp -r /var/www /var/backups
+        cp -r /var/www /var/backups 2>/dev/null
     fi
+    cd /var
+    chattr -R +i backups 2>/dev/null
 
-    chattr +i -R /var/backups/*
+    echo "[Completed backup]"
 }
 
 # Check if running script as root
@@ -579,7 +550,53 @@ if [ -e /etc/os-release ]; then
     distro=$ID
     echo "Detected: $distro"
 
-    # call functions
+    manage_acc
+    configure_ssh
+    update
+    clean_packages
+    run_debsums
+    ips
+    change_bin
+    modules
+    rpcbind
+
+    # -e enumerate (results in fh.txt)
+    # -f firewall (ufw/iptables)
+    # -l logging (fail2ban, auditd)
+    # -b backups (in /var/backups)
+    # -a antivirus (clamav, chkrootkit, rkhunter)
+    while getopts "eflbah" opt; do
+        case $opt in
+            e)
+                enumerate
+                ;;
+            f)
+                firewall
+                ;;
+            l)
+                fail2ban
+                auditd
+                ;;
+            b)
+                backup
+                ;;
+            a)
+                run_clamav
+                run_chkrootkit
+                run_rkhunter
+                ;;
+            h)
+                echo "-e enumerate"
+                echo "-f firewall (ufw/iptables)"
+                echo "-l logging (fail2ban, auditd)"
+                echo "-b backups (in /var/backups)"
+                echo "-a antivirus (clamav, chkrootkit, rkhunter)"
+                ;;
+            \?)
+                echo "Invalid option: -$OPTARG"
+                ;;
+        esac
+    done
 
 else
     echo "Unable to determine distro. Exiting"
